@@ -13,18 +13,35 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.PreparedStatement;
 
-public class GetCommit
+public class GitHub
 {
     private String url;
     private GregorianCalendar date;
-    private PreparedStatement pstmt;
     private Connection dbCon;
+    private PreparedStatement pstmt;
     
-    GetCommit(String url,GregorianCalendar date){
+    GitHub(String url,GregorianCalendar date){
 	this.url=url;
 	this.date=date;
 	this.dbCon=null;
+	this.pstmt=null;
+    }
+
+    void getCommit(){
+	init();
+	String response=get(url);
+	String[] repos=fromListToArray(response);
+	commits(repos);
+	close();
+    }
+
+    void getLimits(){
+	System.out.println(gets("https://api.github.com/rate_limit"));
+    }
+
+    private void init(){
 	openDB();
+
 	try{
 	    this.pstmt=dbCon.prepareStatement("INSERT INTO Commits "+
 		    "VALUES (?,?,?,?,?,?)");
@@ -34,69 +51,23 @@ public class GetCommit
 	    System.exit(1);
 	}
     }
-	
 
-    String gets(String targetURL)
-    {
-	String response=null;
+    private void close(){
+	try{
+	    if(pstmt!=null){
+		pstmt.close(); pstmt=null;}
 
-	HttpsURLConnection connection = null;  
-	try {
-	    //Create connection
-	    URL url = new URL(targetURL);
-	    connection = (HttpsURLConnection)url.openConnection();
-	    connection.setRequestMethod("GET");
-	    connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
-	    connection.setRequestProperty("User-Agent", "Firefox");
-	    connection.setUseCaches(false);
-
-
-	    System.out.println("\nSending 'GET' request to URL : " + url);
-	    connection.connect();
-	    System.out.println("Response Code : " + connection.getResponseCode());
- 
-	    System.out.println("------------------------------\n");
-	   
-
-
-	    //Get Response  
-	    InputStream is = connection.getInputStream();
-	    BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-	    StringBuilder strBld = new StringBuilder(); // or StringBuffer if not Java 5+ 
-
-	    String line;
-	    int numLine=0;
-	    while((line = rd.readLine()) != null) {
-
-		strBld.append(line);
-		strBld.append('\n');
-		numLine++;
-	    }
-	    rd.close();
-	    is.close();
-
-
-	    response= strBld.toString();
-
+	    if(dbCon!=null){
+		dbCon.close(); dbCon=null;}
 	}
-	catch (SocketTimeoutException toe)
-	{
-	    toe.printStackTrace();
-	    System.out.println("Timeout expired before the connection can be established!\nHave been transferred "+toe.bytesTransferred+" bytes.");
-	    toe.getMessage();
+	catch(SQLException ex){
+	    System.err.println("SQLException: "+ex.getMessage());
 	}
-	catch (Exception e) {
-	    e.printStackTrace();
-	}
-	finally {
-	    if(connection != null) {
-		connection.disconnect(); 
-	    }
-	}
-	return response;
     }
 
-    String get(String targetURL)
+    //Gets https targetURL response body
+    //Prints to output informations about sent and received HTTP header and response status
+    private String get(String targetURL)
     {
 	String response=null;
 
@@ -156,7 +127,7 @@ public class GetCommit
 	catch (SocketTimeoutException toe)
 	{
 	    toe.printStackTrace();
-	    System.out.println("Timeout expired before the connection can be established!\nHave been transferred "+toe.bytesTransferred+" bytes.");
+	    System.err.println("Timeout expired before the connection can be established!\nHave been transferred "+toe.bytesTransferred+" bytes.");
 	    toe.getMessage();
 	}
 	catch (Exception e) {
@@ -170,7 +141,66 @@ public class GetCommit
 	return response;
     }
 
-    String[] fromListToArray(String response)
+    //Like get but does not print information on stdout
+    private String gets(String targetURL)
+    {
+	String response=null;
+
+	HttpsURLConnection connection = null;  
+	try {
+	    //Create connection
+	    URL url = new URL(targetURL);
+	    connection = (HttpsURLConnection)url.openConnection();
+	    connection.setRequestMethod("GET");
+	    connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+	    connection.setRequestProperty("User-Agent", "Firefox");
+	    connection.setUseCaches(false);
+
+	    connection.connect();
+
+	    //Get Response  
+	    InputStream is = connection.getInputStream();
+	    BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+	    StringBuilder strBld = new StringBuilder(); // or StringBuffer if not Java 5+ 
+
+	    String line;
+	    int numLine=0;
+	    while((line = rd.readLine()) != null) {
+
+		strBld.append(line);
+		strBld.append('\n');
+		numLine++;
+	    }
+	    rd.close();
+	    is.close();
+
+
+	    response= strBld.toString();
+
+	}
+	catch (SocketTimeoutException toe)
+	{
+	    toe.printStackTrace();
+	    System.err.println("Timeout expired before the connection can be established!\nHave been transferred "+toe.bytesTransferred+" bytes.");
+	    toe.getMessage();
+	}
+	catch (Exception e) {
+	    e.printStackTrace();
+	}
+	finally {
+	    if(connection != null) {
+		connection.disconnect(); 
+	    }
+	}
+	return response;
+    }
+
+
+    //fromListToArray parses a csv list of elements of a HTTPS
+    //response and assigns them to a String[]
+    //First it counts response elements number to know the String[] length
+    //Second it assigns those elements to String[]
+    private String[] fromListToArray(String response)
     {	
 	String[] repos;	
 	int i=0;
@@ -179,11 +209,10 @@ public class GetCommit
 	int numEl=0;
 	final String message="\"message\":";
 
-	//Scorro l'intera risposta per contare quanti elementi
-	//appartegono al vettore
+	//Parsing response to count its elements
 	for(i=0;i<response.length();i++)
 	{
-	    //Ignoro il contenuto del campo "message":
+	    //Skip "body" content
 	    if( (response.length()-i) > message.length() )
 		if( response.substring(i,i+message.length()).equals(message) )
 		{
@@ -219,11 +248,10 @@ public class GetCommit
 	level=0;
 	int beginIndex=0,endIndex=0;
 
-	//Scorro l'intera risposta per prelevare gli elementi del
-	//vettore da assegnare a repos[]
+	//Parsing response to assign its elements to repos[] array
 	for(i=0;i<response.length();i++)
 	{
-	    //Ignoro il contenuto del campo "message":
+	    //Skip "body" content
 	    if( (response.length()-i) > message.length() )
 		if( response.substring(i,i+message.length()).equals(message) )
 		{
@@ -272,7 +300,11 @@ public class GetCommit
 	return repos;
     }
 
-    void getCommits(String[] repos)
+    //commits follows "commit_url" value for every repository passed as argument,
+    //and for each commit found if its date comes after input date then it calls printCommit function
+    //on new commit "url" with full informations, such as committed files,
+    //and passing "full_name" value and "date" value.
+    private void commits(String[] repos)
     {
 	int i,j,k;
 	final String commits_url="\"commits_url\":";
@@ -286,18 +318,19 @@ public class GetCommit
 	String url_value,date_value;
 	int beginIndex,endIndex,level;
 	SimpleDateFormat sdf =new SimpleDateFormat("yyyy-MM-dd");
+	SimpleDateFormat sdf2 =new SimpleDateFormat("dd-MM-yyyy");
 	GregorianCalendar date2=new GregorianCalendar();
 
 	for(i=0;i<repos.length;i++)
 	{
-	    //leggo il campo "commit_url":
+	    //Get "commits_url" value of repository[i]
 	    beginIndex=repos[i].indexOf(commits_url)+commits_url.length();
 	    for( ; repos[i].charAt(beginIndex)!='"' ; beginIndex++);
 	    beginIndex++;
 	    for(endIndex=beginIndex;repos[i].charAt(endIndex)!='"' && repos[i].charAt(endIndex)!='{';endIndex++);
 	    url_value=repos[i].substring(beginIndex,endIndex);
 
-	    //Leggo il campo "full_name": del repository[i]
+	    //Get "full_name" value of repository[i]
 	    beginIndex=repos[i].indexOf(full_name)+full_name.length();
 	    for( ; repos[i].charAt(beginIndex)!='"';beginIndex++);
 	    beginIndex++;
@@ -305,17 +338,22 @@ public class GetCommit
 	    repoName=repos[i].substring( beginIndex, endIndex );
 
 
-	    commits=fromListToArray(get(url_value));
+	    commits=fromListToArray(gets(url_value));
+
+	    if(commits.length>0)
+		System.out.println(" Repository \""+repoName+"\" has commit(s)\n");
+	    else
+		System.out.println(" Repository \""+repoName+"\" has no commit\n");
 
 	    for(j=0;j<commits.length;j++)
 	    {
-		//Salto il contenuto dell'elemento \"commit\"
+		//Skip \"commit\" content
 		k=commits[j].indexOf(commit)+commit.length();
 		for( ; commits[j].charAt(k)!='{' ; k++);
 		k++;
 		for(level=0;level>=0;k++)
 		{
-		    //Ignoro il contenuto del campo "message":
+		    //Search and skip \"message\" subfield content
 		    if( (commits[j].length()-k) > message.length() )
 			if( commits[j].substring(k,k+message.length()).equals(message) )
 			{
@@ -332,16 +370,7 @@ public class GetCommit
 			    level--;
 		}
 
-		//sovrascrivo url_value con il nuovo url del
-		//singolo commit[j] di repos[i] contenente
-		//informazioni dettagliate, inclusa la lista di files
-		beginIndex=commits[j].indexOf(url,k)+url.length();
-		for( ; commits[j].charAt(beginIndex)!='"' ; beginIndex++);
-		beginIndex++;
-		for(endIndex=beginIndex;commits[j].charAt(endIndex)!='"' && commits[j].charAt(endIndex)!='{';endIndex++);
-		url_value=commits[j].substring(beginIndex,endIndex);
-
-		//Leggo il campo "date":
+	    	//Get "date" value
 		beginIndex=commits[j].indexOf(date)+date.length();
 		for( ; commits[j].charAt(beginIndex)!='"' ; beginIndex++);
 		beginIndex++;
@@ -356,23 +385,31 @@ public class GetCommit
 		}
 
 		if(this.date.compareTo(date2)<=0)
-		    printCommit(repoName,gets(url_value),date2);
-	    }
-	}
-	
-	try{
-	    if(pstmt!=null){
-		pstmt.close(); pstmt=null;}
+		{
+		    //override url_value with new url of commit[j] of repos[i]
+		    //which has full information about the commit
+		    //including its files list
+		    beginIndex=commits[j].indexOf(url,k)+url.length();
+		    for( ; commits[j].charAt(beginIndex)!='"' ; beginIndex++);
+		    beginIndex++;
+		    for(endIndex=beginIndex;commits[j].charAt(endIndex)!='"' && commits[j].charAt(endIndex)!='{';endIndex++);
+		    url_value=commits[j].substring(beginIndex,endIndex);
 
-	    if(dbCon!=null){
-		dbCon.close(); dbCon=null;}
-	}
-	catch(SQLException ex){
-	    System.err.println("SQLException: "+ex.getMessage());
+		    printCommit(repoName,gets(url_value),date2);
+		}
+
+		if(this.date.compareTo(date2)<=0)
+		    System.out.println("\t commit["+(j+1)+"]\t"+sdf2.format(date2.getTime())+" | "+sdf2.format(this.date.getTime())+"\tV");
+		else
+		    System.out.println("\t commit["+(j+1)+"]\t"+sdf2.format(date2.getTime())+" | "+sdf2.format(this.date.getTime()));
+	    }
+
+	    System.out.println("-----------------------------------------------\n");
 	}
     }
 
-    void printCommit(String repoName, String commit,GregorianCalendar date2)
+    //Get all needed informations about commit and use them to update "Commits" table
+    private void printCommit(String repoName, String commit,GregorianCalendar date2)
     {
 	final String sha="\"sha\":";
 	final String login="\"login\":";
@@ -382,21 +419,21 @@ public class GetCommit
 	StringBuilder strbld=new StringBuilder();
 	
 	
-	//leggo il campo "sha":
+	//Get "sha": value
 	beginIndex=commit.indexOf(sha)+sha.length();
 	for( ; commit.charAt(beginIndex)!='"' ; beginIndex++);
 	beginIndex++;
 	for(endIndex=beginIndex;commit.charAt(endIndex)!='"' && commit.charAt(endIndex)!='{';endIndex++);
 	sha_value=commit.substring(beginIndex,endIndex);
 	
-	//leggo il campo "login":
+	//Get "login": value
 	beginIndex=commit.indexOf(login)+login.length();
 	for( ; commit.charAt(beginIndex)!='"' ; beginIndex++);
 	beginIndex++;
 	for(endIndex=beginIndex;commit.charAt(endIndex)!='"' && commit.charAt(endIndex)!='{';endIndex++);
 	login_value=commit.substring(beginIndex,endIndex);
 	
-	//leggo i campi "filename":
+	//Get "filename": fields values
 	for(k=0 ; ( k=commit.indexOf(filename,k) )!=-1 ; k=endIndex)
 	{
 	    beginIndex=k+filename.length();
@@ -416,12 +453,11 @@ public class GetCommit
 	    pstmt.executeUpdate();
 	}
 	catch(SQLException ex){
-	    System.err.println("SQLException: "+ex.getMessage()+"\nErrore durante l'inserimento dei dati");
+	    System.err.println("An error occurred while updating the table\nSQLException: "+ex.getMessage());
 	}
     }
 
-
-    void openDB()
+    private void openDB()
     {
 	String username;
 	String password;
@@ -455,8 +491,8 @@ public class GetCommit
 	}
 	*/
 	catch(SQLException ex){
+	    System.err.println("An error occurred accessing database");
 	    System.err.println("SQLException: "+ex.getMessage());
-	    System.err.println("Accesso al database non riuscito");
 	    System.exit(1);
 	}
 	finally{
@@ -468,6 +504,6 @@ public class GetCommit
 		}
 	}
 
-	System.err.println("Accesso al DB effettuato correttamente e tabella Commits creata");
+	System.err.println("Database accessed with no errors, Issues table created");
     }
-}//End of Class GetCommit
+}//End of Class GitHub

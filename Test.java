@@ -19,18 +19,6 @@ public class Test{
 	targetURL=args[0];
 	data=args[1];
 
-	//targetURL="https://api.github.com/users/deniscp/repos";
-	//targetURL="https://api.github.com/orgs/octokit/repos";
-	//data="01-07-2015";
-	
-	/*
-	targetURL="https://api.github.com/repos/octokit/go-octokit";
-	targetURL="https://api.github.com/repos/octokit/octokit.rb";
-	targetURL="https://api.github.com/repos/octokit/octokit.objc";
-	targetURL="https://api.github.com/repos/octokit/octokit.net";
-	targetURL="http://localhost/nuovo/issues3";
-	targetURL="https://api.github.com/repos/octokit/octokit.net/issues?page=1";
-	*/
 
 	SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
 	GregorianCalendar date=new GregorianCalendar();
@@ -41,14 +29,10 @@ public class Test{
 	    e.printStackTrace();
 	}
 
-	GetCommit conn=new GetCommit(targetURL,date);
+	GitHub conn=new GitHub(targetURL,date);
 
-	String response=conn.get(targetURL);
-	String[] repos=conn.fromListToArray(response);
-
-
-	conn.getCommits(repos);	
-
+	conn.getCommit();
+	conn.getLimits();
 
     }//end of main
 }//end of Test class

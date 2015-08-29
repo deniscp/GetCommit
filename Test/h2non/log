@@ -1,0 +1,13 @@
+Database accessed with no errors, Issues table created
+java.io.IOException: Server returned HTTP response code: 409 for URL: https://api.github.com/repos/h2non/angular-load-bench/commits
+	at sun.net.www.protocol.http.HttpURLConnection.getInputStream(HttpURLConnection.java:1627)
+	at sun.net.www.protocol.https.HttpsURLConnectionImpl.getInputStream(HttpsURLConnectionImpl.java:254)
+	at GitHub.gets(GitHub.java:164)
+	at GitHub.commits(GitHub.java:343)
+	at GitHub.getCommit(GitHub.java:34)
+	at Test.main(Test.java:34)
+Exception in thread "main" java.lang.NullPointerException
+	at GitHub.fromListToArray(GitHub.java:215)
+	at GitHub.commits(GitHub.java:343)
+	at GitHub.getCommit(GitHub.java:34)
+	at Test.main(Test.java:34)
